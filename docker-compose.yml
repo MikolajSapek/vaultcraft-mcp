@@ -1,0 +1,19 @@
+# Runs on sapserver next to the n8n Cloudflare tunnel, which routes
+# vaultcraft.sapcorp.eu -> http://vaultcraft-mcp:8787. No port is published on the host.
+services:
+  vaultcraft-mcp:
+    build: .
+    container_name: vaultcraft-mcp
+    restart: unless-stopped
+    read_only: true
+    env_file:
+      - path: .env
+        required: false
+    networks: [n8n_default]
+    logging:
+      driver: json-file
+      options: { max-size: "1m", max-file: "2" }
+
+networks:
+  n8n_default:
+    external: true
