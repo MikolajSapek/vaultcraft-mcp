@@ -6,6 +6,8 @@ services:
     container_name: vaultcraft-mcp
     restart: unless-stopped
     read_only: true
+    cpus: 0.5
+    mem_limit: 256m
     env_file:
       - path: .env
         required: false

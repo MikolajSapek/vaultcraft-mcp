@@ -5,6 +5,9 @@
 const NAV_NOTES = new Set(["00 - Start Here", "README_PLUGINS", "01 - Course Map", "Tables"]);
 const LIST_CAP = 50;
 const DEFINITION_MAX = 200;
+const TARGET_MAX = 200;
+const LINKS_MAX = 50_000;
+const FUZZY_MAX = 48;
 
 const stripCode = (text) => text.replace(/```[\s\S]*?```/g, "").replace(/`[^`\n]*`/g, "");
 // Obsidian resolves links case-insensitively, so names are compared in lower case.
@@ -63,13 +66,17 @@ function suggest(target, names) {
   const t = target.toLowerCase();
   const prefixed = [...names].find((n) => n.toLowerCase().startsWith(t) || t.startsWith(n.toLowerCase()));
   if (prefixed && Math.min(t.length, prefixed.length) / Math.max(t.length, prefixed.length) >= 0.5) return prefixed;
+  // Edit distance only for short names, and only against names of similar length: keeps a request cheap.
+  if (t.length > FUZZY_MAX) return null;
+  const limit = Math.max(2, Math.floor(t.length / 4));
   let best = null;
   let bestScore = Infinity;
   for (const name of names) {
+    if (Math.abs(name.length - t.length) > limit) continue;
     const score = levenshtein(t, name.toLowerCase());
     if (score < bestScore) [best, bestScore] = [name, score];
   }
-  return t.length >= 5 && bestScore <= Math.max(2, Math.floor(t.length / 4)) ? best : null;
+  return t.length >= 5 && bestScore <= limit ? best : null;
 }
 
 const cap = (list) => list.slice(0, LIST_CAP);
@@ -90,17 +97,22 @@ export function auditVault(notes, attachments = []) {
   const outbound = new Map();
   const broken = [];
 
+  let linkCount = 0;
   for (const note of notes) {
     const from = baseName(note.path);
     const linked = new Set();
     const reported = new Set();
     for (const { raw, embed } of linkTargets(note.content)) {
+      if (++linkCount > LINKS_MAX) throw new Error(`More than ${LINKS_MAX} links: check the vault in parts.`);
+      if (raw.length > TARGET_MAX) continue;
       const target = byKey.get(key(baseName(raw)));
       if (target) {
         if (target !== from) linked.add(target);
       } else if (!attachmentNames.has(key(raw)) && !attachmentNames.has(key(raw.split("/").pop())) && !reported.has(raw)) {
         reported.add(raw);
-        broken.push({ note: note.path, target: raw, embed, suggestion: embed ? null : suggest(baseName(raw), names) });
+        // Suggestions cost a scan of every name, so only the reported links get one.
+        const suggestion = embed || broken.length >= LIST_CAP ? null : suggest(baseName(raw), names);
+        broken.push({ note: note.path, target: raw, embed, suggestion });
       }
     }
     outbound.set(from, linked);

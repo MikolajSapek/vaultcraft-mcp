@@ -11,6 +11,21 @@ import { VAULT_TYPES, folderList, vaultConfigFiles } from "./config.js";
 const PORT = Number(process.env.PORT ?? 8787);
 const CHALLENGE = process.env.OPENAI_APPS_CHALLENGE ?? "";
 const MAX_BODY = 4 * 1024 * 1024;
+const RATE_LIMIT = 60; // requests per client per minute
+const hits = new Map();
+
+// ponytail: in-memory per-IP window, fine for one process; move to Cloudflare rules if it scales out.
+function rateLimited(req) {
+  const ip = req.headers["cf-connecting-ip"] ?? req.socket.remoteAddress ?? "";
+  const minute = Math.floor(Date.now() / 60_000);
+  const entry = hits.get(ip);
+  if (!entry || entry.minute !== minute) {
+    if (hits.size > 10_000) hits.clear();
+    hits.set(ip, { minute, count: 1 });
+    return false;
+  }
+  return ++entry.count > RATE_LIMIT;
+}
 const VERSION = JSON.parse(readFileSync(new URL("../package.json", import.meta.url))).version;
 
 const TEMPLATE_KINDS = ["concept", "lecture", "lecture-golden", "lab", "bridge"];
@@ -143,7 +158,10 @@ async function handleMcp(req, res) {
 const httpServer = createServer(async (req, res) => {
   const path = new URL(req.url, "http://localhost").pathname;
   try {
-    if (path === "/mcp") return await handleMcp(req, res);
+    if (path === "/mcp") {
+      if (rateLimited(req)) return sendJson(res, 429, { jsonrpc: "2.0", error: { code: -32000, message: "Too many requests" }, id: null });
+      return await handleMcp(req, res);
+    }
     if (path === "/.well-known/openai-apps-challenge" && CHALLENGE) {
       return res.writeHead(200, { "content-type": "text/plain" }).end(CHALLENGE);
     }

@@ -119,3 +119,19 @@ test("audit: links resolve case-insensitively like Obsidian; short names get no 
   ]);
   assert.deepEqual(r.brokenLinks, [{ note: "A.md", target: "DDL", embed: false, suggestion: null }]);
 });
+
+test("audit: a huge broken target and many names stay fast", () => {
+  const notes = Array.from({ length: 1000 }, (_, i) => ({ path: `N${i} ${"x".repeat(40)}.md`, content: "" }));
+  notes.push({ path: "Big.md", content: `[[${"a".repeat(190_000)}]] ` + Array.from({ length: 200 }, (_, i) => `[[missing ${i} ${"y".repeat(36)}]]`).join(" ") });
+  const t = Date.now();
+  const r = auditVault(notes);
+  assert.ok(Date.now() - t < 1000, `took ${Date.now() - t} ms`);
+  assert.equal(r.brokenLinks.length, 50);
+});
+
+test("rate limit answers 429 after 60 requests a minute from one client", async () => {
+  const send = () => fetch(URL_MCP, { method: "POST", headers: { "content-type": "application/json", accept: "application/json, text/event-stream", "cf-connecting-ip": "203.0.113.9" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }) });
+  const statuses = [];
+  for (let i = 0; i < 61; i++) statuses.push((await send()).status);
+  assert.equal(statuses.filter((s) => s === 429).length, 1);
+});

@@ -5,7 +5,7 @@ const COLORS = [15778400, 5793266, 14914867, 15913728, 4170580, 8978687];
 
 const GRAPH_FOLDERS = {
   studies: ["Lectures", "Labs", "Concepts", "Formulas", "Examples"],
-  work: ["Projects", "Meetings", "Companies", "People", "Decisions", "Concepts"],
+  work: ["Meetings", "Projects", "Companies", "People", "Decisions", "Concepts"],
   research: ["Papers", "Concepts", "Methods", "Hypotheses", "Data"],
   personal: ["Topics", "Concepts", "Practice", "Inspiration", "Journal"],
 };
