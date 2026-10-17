@@ -2,7 +2,8 @@
 // concept notes without a definition or example, and lectures that do not list the
 // concepts that name them as their source. Nothing here touches disk or network.
 
-const NAV_NOTES = new Set(["00 - Start Here", "README_PLUGINS", "01 - Course Map", "Tables"]);
+// Keep these rules in step with vaultcraft skills/vaultcraft/scripts/check_vault.py (test/parity.test.js).
+const NAV_NOTES = new Set(["00 - start here", "readme_plugins", "01 - course map", "tables"]);
 const LIST_CAP = 50;
 const DEFINITION_MAX = 200;
 const TARGET_MAX = 200;
@@ -28,6 +29,13 @@ function linkTargets(text) {
 function frontmatter(text) {
   const m = text.match(/^---\r?\n([\s\S]*?)\r?\n---/);
   return m ? m[1] : "";
+}
+
+function aliases(fm) {
+  const inline = fm.match(/^aliases:\s*\[(.*?)\]/m);
+  if (inline) return inline[1].split(",").map((a) => a.trim().replace(/^["']|["']$/g, "")).filter(Boolean);
+  const block = fm.match(/^aliases:\s*\n((?:\s*-\s*.+\n?)+)/m);
+  return block ? block[1].split("\n").map((a) => a.trim().replace(/^-\s*/, "").replace(/^["']|["']$/g, "")).filter(Boolean) : [];
 }
 
 function isConcept(fm) {
@@ -79,47 +87,55 @@ function suggest(target, names) {
   return t.length >= 5 && bestScore <= limit ? best : null;
 }
 
-const cap = (list) => list.slice(0, LIST_CAP);
 
 /**
  * @param {{path: string, content: string}[]} notes  Markdown notes of the vault.
  * @param {string[]} attachments  Paths of non-note files (PDFs, images) in the vault.
+ * @param {number} listCap  Longest list returned per problem type.
  */
-export function auditVault(notes, attachments = []) {
-  const byKey = new Map(notes.map((n) => [key(baseName(n.path)), baseName(n.path)]));
-  const names = [...byKey.values()];
+export function auditVault(notes, attachments = [], listCap = LIST_CAP) {
+  const cap = (list) => list.slice(0, listCap);
+  // Two notes can share a name in different folders; both checks resolve to the first path.
+  const sortedNotes = [...notes].sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+  const contentOf = new Map(sortedNotes.map((n) => [n.path, n.content]));
+  const byKey = new Map();
+  const aliasKeys = new Map();
+  for (const n of sortedNotes) if (!byKey.has(key(baseName(n.path)))) byKey.set(key(baseName(n.path)), n.path);
+  for (const n of sortedNotes) {
+    for (const a of aliases(frontmatter(n.content))) if (!aliasKeys.has(key(a))) aliasKeys.set(key(a), n.path);
+  }
+  const names = [...new Set(sortedNotes.map((n) => baseName(n.path)))];
   // Obsidian also resolves [[Dashboard]] to Dashboard.base, so match attachments with and without extension.
   const attachmentNames = new Set(attachments.flatMap((p) => {
     const file = p.split("/").pop();
     return [p, file, file.replace(/\.[^.]+$/, "")].map(key);
   }));
-  const inbound = new Map(names.map((n) => [n, 0]));
+  const inbound = new Map(sortedNotes.map((n) => [n.path, 0]));
   const outbound = new Map();
   const broken = [];
 
   let linkCount = 0;
-  for (const note of notes) {
-    const from = baseName(note.path);
+  for (const note of sortedNotes) {
     const linked = new Set();
     const reported = new Set();
     for (const { raw, embed } of linkTargets(note.content)) {
       if (++linkCount > LINKS_MAX) throw new Error(`More than ${LINKS_MAX} links: check the vault in parts.`);
       if (raw.length > TARGET_MAX) continue;
-      const target = byKey.get(key(baseName(raw)));
+      const target = byKey.get(key(baseName(raw))) ?? aliasKeys.get(key(raw));
       if (target) {
-        if (target !== from) linked.add(target);
+        if (target !== note.path) linked.add(target);
       } else if (!attachmentNames.has(key(raw)) && !attachmentNames.has(key(raw.split("/").pop())) && !reported.has(raw)) {
         reported.add(raw);
         // Suggestions cost a scan of every name, so only the reported links get one.
-        const suggestion = embed || broken.length >= LIST_CAP ? null : suggest(baseName(raw), names);
+        const suggestion = embed || broken.length >= Math.min(listCap, LIST_CAP) ? null : suggest(baseName(raw), names);
         broken.push({ note: note.path, target: raw, embed, suggestion });
       }
     }
-    outbound.set(from, linked);
+    outbound.set(note.path, linked);
     for (const t of linked) inbound.set(t, inbound.get(t) + 1);
   }
 
-  const orphans = [...inbound].filter(([n, c]) => c === 0 && !NAV_NOTES.has(n)).map(([n]) => n);
+  const orphans = [...inbound].filter(([p, c]) => c === 0 && !NAV_NOTES.has(key(baseName(p)))).map(([p]) => baseName(p));
   const missingDefinition = [];
   const longDefinition = [];
   const missingExample = [];
@@ -127,19 +143,19 @@ export function auditVault(notes, attachments = []) {
   const missingBacklinks = [];
   let concepts = 0;
 
-  for (const note of notes) {
-    const name = baseName(note.path);
-    const fm = frontmatter(note.content);
+  for (const [path, content] of contentOf) {
+    const name = baseName(path);
+    const fm = frontmatter(content);
     if (!isConcept(fm)) continue;
     concepts++;
-    const definition = definitionText(note.content);
+    const definition = definitionText(content);
     if (!definition) missingDefinition.push(name);
     else if (definition.length > DEFINITION_MAX) longDefinition.push(name);
-    if (!hasExample(note.content)) missingExample.push(name);
-    if (outbound.get(name).size < 2) fewLinks.push(name);
+    if (!hasExample(content)) missingExample.push(name);
+    if (outbound.get(path).size < 2) fewLinks.push(name);
     const lecture = byKey.get(key(sourceLecture(fm) ?? ""));
-    if (lecture && !outbound.get(lecture).has(name)) {
-      missingBacklinks.push({ lecture, concept: name });
+    if (lecture && !outbound.get(lecture).has(path)) {
+      missingBacklinks.push({ lecture: baseName(lecture), concept: name });
     }
   }
 
