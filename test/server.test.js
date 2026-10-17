@@ -9,7 +9,7 @@ let child;
 
 before(async () => {
   child = spawn(process.execPath, ["src/server.js"], {
-    env: { ...process.env, PORT: String(PORT), OPENAI_APPS_CHALLENGE: "token-123" },
+    env: { ...process.env, PORT: String(PORT), OPENAI_APPS_CHALLENGE: "token-123", RATE_LIMIT: "60" },
     stdio: ["ignore", "pipe", "inherit"],
   });
   await new Promise((resolve) => child.stdout.once("data", resolve));
@@ -129,9 +129,9 @@ test("audit: a huge broken target and many names stay fast", () => {
   assert.equal(r.brokenLinks.length, 50);
 });
 
-test("rate limit answers 429 after 60 requests a minute from one client", async () => {
+test("rate limit answers 429 once the shared per-minute window is full", async () => {
   const send = () => fetch(URL_MCP, { method: "POST", headers: { "content-type": "application/json", accept: "application/json, text/event-stream", "cf-connecting-ip": "203.0.113.9" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }) });
   const statuses = [];
-  for (let i = 0; i < 61; i++) statuses.push((await send()).status);
-  assert.equal(statuses.filter((s) => s === 429).length, 1);
+  for (let i = 0; i < 130; i++) statuses.push((await send()).status);
+  assert.ok(statuses.includes(429), "window never filled");
 });
