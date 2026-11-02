@@ -32,6 +32,8 @@ Add it to Claude Code:
 claude mcp add --transport http vaultcraft https://vaultcraft.sapcorp.eu/mcp
 ```
 
+Add it to Cursor or any client that reads `mcpServers`: copy [`mcp.json`](mcp.json) into `.cursor/mcp.json`.
+
 ## Deploy
 
 The container runs next to an existing Cloudflare tunnel (`docker-compose.yml`, network `n8n_default`). No host port is published. `OPENAI_APPS_CHALLENGE` in `.env` serves the OpenAI domain-verification token at `/.well-known/openai-apps-challenge`.
