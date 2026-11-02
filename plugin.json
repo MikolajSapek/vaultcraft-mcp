@@ -1,0 +1,17 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "vaultcraft-mcp",
+  "version": "1.0.0",
+  "description": "Remote MCP server for building Obsidian vaults: vault settings, note templates and a broken-link check.",
+  "author": {
+    "name": "Mikołaj Sapek"
+  },
+  "homepage": "https://github.com/MikolajSapek/vaultcraft-mcp",
+  "repository": "https://github.com/MikolajSapek/vaultcraft-mcp",
+  "license": "MIT",
+  "keywords": [
+    "obsidian",
+    "mcp",
+    "notes"
+  ]
+}

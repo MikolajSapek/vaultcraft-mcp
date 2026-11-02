@@ -1,6 +1,8 @@
 {
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
   "mcpServers": {
     "vaultcraft": {
+      "type": "streamable-http",
       "url": "https://vaultcraft.sapcorp.eu/mcp"
     }
   }
