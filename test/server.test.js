@@ -6,6 +6,7 @@ import { auditVault } from "../src/audit.js";
 const PORT = 18787;
 const URL_MCP = `http://127.0.0.1:${PORT}/mcp`;
 let child;
+let stdout = "";
 
 before(async () => {
   child = spawn(process.execPath, ["src/server.js"], {
@@ -13,6 +14,7 @@ before(async () => {
     stdio: ["ignore", "pipe", "inherit"],
   });
   await new Promise((resolve) => child.stdout.once("data", resolve));
+  child.stdout.on("data", (c) => { stdout += c; });
 });
 after(() => child.kill());
 
@@ -127,6 +129,15 @@ test("audit: a huge broken target and many names stay fast", () => {
   const r = auditVault(notes);
   assert.ok(Date.now() - t < 1000, `took ${Date.now() - t} ms`);
   assert.equal(r.brokenLinks.length, 50);
+});
+
+test("logs one usage line per MCP call, without note content", async () => {
+  await rpc("initialize", { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "codex mcp\nclient", version: "1.2" } });
+  await rpc("tools/call", { name: "check_vault", arguments: { notes: [{ path: "a.md", content: "SECRET-NOTE" }] } });
+  await new Promise((r) => setTimeout(r, 50));
+  assert.match(stdout, /^mcp 200 initialize codex_mcp_client\/1\.2$/m);
+  assert.match(stdout, /^mcp 200 tools\/call check_vault$/m);
+  assert.doesNotMatch(stdout, /SECRET-NOTE|a\.md/);
 });
 
 test("rate limit answers 429 once the shared per-minute window is full", async () => {

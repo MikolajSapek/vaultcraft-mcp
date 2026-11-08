@@ -14,7 +14,8 @@ services:
     networks: [n8n_default]
     logging:
       driver: json-file
-      options: { max-size: "1m", max-file: "2" }
+      # Usage lines (~700 KB/day) are counted by scripts/usage.sh; 10 x 10 MB keeps months.
+      options: { max-size: "10m", max-file: "10" }
 
 networks:
   n8n_default:

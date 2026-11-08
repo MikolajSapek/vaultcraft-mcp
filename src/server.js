@@ -1,5 +1,6 @@
 // vaultcraft MCP server: stateless Streamable HTTP, no auth, no storage.
-// Tools only compute and return. Request bodies are never logged or kept.
+// Tools only compute and return. Request bodies are never logged or kept: usage logging writes
+// only the JSON-RPC method, tool name, client name/version and HTTP status.
 import { createServer } from "node:http";
 import { readFileSync } from "node:fs";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -126,6 +127,18 @@ function readBody(req) {
   });
 }
 
+// Untrusted strings reach the log, so keep them to one short token.
+const token = (v) => String(v ?? "").replace(/[^\w./@-]+/g, "_").slice(0, 60);
+
+function usageLine(msg, status) {
+  const m = Array.isArray(msg) ? msg[0] : msg;
+  const method = token(m?.method);
+  const extra = method === "tools/call" ? token(m.params?.name)
+    : method === "initialize" ? `${token(m.params?.clientInfo?.name)}/${token(m.params?.clientInfo?.version)}`
+    : "";
+  return `mcp ${status} ${method}${extra ? ` ${extra}` : ""}\n`;
+}
+
 function sendJson(res, status, body) {
   res.writeHead(status, { "content-type": "application/json" }).end(JSON.stringify(body));
 }
@@ -143,6 +156,7 @@ async function handleMcp(req, res) {
   const server = buildServer();
   const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
   res.on("close", () => {
+    process.stdout.write(usageLine(body, res.statusCode));
     transport.close();
     server.close();
   });
