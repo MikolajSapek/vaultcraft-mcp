@@ -9,6 +9,7 @@
   "homepage": "https://github.com/MikolajSapek/vaultcraft-mcp",
   "repository": "https://github.com/MikolajSapek/vaultcraft-mcp",
   "license": "MIT",
+  "logo": "logo.png",
   "keywords": [
     "obsidian",
     "mcp",
